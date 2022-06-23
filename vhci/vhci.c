@@ -291,7 +291,7 @@ static int bce_vhci_reset_device(struct bce_vhci *vhci, int index, u16 timeout)
             }
         }
         vhci->devices[devid] = NULL;
-        vhci->port_to_device[devid] = 0;
+        vhci->port_to_device[index] = 0;
         bce_vhci_cmd_device_destroy(&vhci->cq, devid);
     }
     status = bce_vhci_cmd_port_reset(&vhci->cq, (u8) index, timeout);
