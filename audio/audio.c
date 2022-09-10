@@ -90,7 +90,7 @@ static int aaudio_probe(struct pci_dev *dev, const struct pci_device_id *id)
         dev_err(&dev->dev, "aaudio: Failed to create ALSA card\n");
         goto fail;
     }
-    strcpy(aaudio->card->driver, "AppleT2");
+
     strcpy(aaudio->card->shortname, "Apple T2 Audio");
     strcpy(aaudio->card->longname, "Apple T2 Audio");
     strcpy(aaudio->card->mixername, "Apple T2 Audio");
@@ -101,10 +101,12 @@ static int aaudio_probe(struct pci_dev *dev, const struct pci_device_id *id)
         dev_err(&dev->dev, "aaudio: Failed to initialize over BCE\n");
         goto fail_snd;
     }
+
     if (aaudio_init_bs(aaudio)) {
         dev_err(&dev->dev, "aaudio: Failed to initialize BufferStruct\n");
         goto fail_snd;
     }
+
     if ((status = aaudio_cmd_set_remote_access(aaudio, AAUDIO_REMOTE_ACCESS_ON))) {
         dev_err(&dev->dev, "Failed to set remote access\n");
         return status;
@@ -113,6 +115,19 @@ static int aaudio_probe(struct pci_dev *dev, const struct pci_device_id *id)
     if (snd_card_register(aaudio->card)) {
         dev_err(&dev->dev, "aaudio: Failed to register ALSA sound device\n");
         goto fail_snd;
+    }
+
+    struct aaudio_subdevice *sdev;
+    list_for_each_entry(sdev, &aaudio->subdevice_list, list) {
+        struct aaudio_buffer_struct_device *dev = &aaudio->bs->devices[sdev->buf_id];
+
+        if (sdev->out_stream_cnt == 1 && !strcmp(dev->name, "Speaker")) {
+            char name[10];
+            struct snd_pcm_hardware *hw = sdev->out_streams[0].alsa_hw_desc;
+
+            snprintf(name, sizeof(name) / sizeof(char), "AppleT2x%d", hw->channels_min);
+            strcpy(aaudio->card->driver, name);
+        }
     }
 
     return 0;
