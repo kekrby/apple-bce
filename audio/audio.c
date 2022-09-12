@@ -122,11 +122,9 @@ static int aaudio_probe(struct pci_dev *dev, const struct pci_device_id *id)
         struct aaudio_buffer_struct_device *dev = &aaudio->bs->devices[sdev->buf_id];
 
         if (sdev->out_stream_cnt == 1 && !strcmp(dev->name, "Speaker")) {
-            char name[10];
             struct snd_pcm_hardware *hw = sdev->out_streams[0].alsa_hw_desc;
 
-            snprintf(name, sizeof(name) / sizeof(char), "AppleT2x%d", hw->channels_min);
-            strcpy(aaudio->card->driver, name);
+            snprintf(aaudio->card->driver, sizeof(aaudio->card->driver) / sizeof(char), "AppleT2x%d", hw->channels_min);
         }
     }
 
