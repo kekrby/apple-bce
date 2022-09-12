@@ -23,6 +23,7 @@ static void aaudio_free_dev(struct aaudio_subdevice *sdev);
 static int aaudio_probe(struct pci_dev *dev, const struct pci_device_id *id)
 {
     struct aaudio_device *aaudio = NULL;
+    struct aaudio_subdevice *sdev = NULL;
     int status = 0;
     u32 cfg;
 
@@ -117,7 +118,6 @@ static int aaudio_probe(struct pci_dev *dev, const struct pci_device_id *id)
         goto fail_snd;
     }
 
-    struct aaudio_subdevice *sdev;
     list_for_each_entry(sdev, &aaudio->subdevice_list, list) {
         struct aaudio_buffer_struct_device *dev = &aaudio->bs->devices[sdev->buf_id];
 
