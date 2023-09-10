@@ -57,13 +57,6 @@ struct bce_vhci_urb {
     u32 receive_offset;
 };
 
-struct bce_vhci_transfer_queue_urb_cancel_work {
-    struct work_struct ws;
-    struct bce_vhci_transfer_queue *q;
-    struct urb *urb;
-    int status;
-};
-
 void bce_vhci_create_transfer_queue(struct bce_vhci *vhci, struct bce_vhci_transfer_queue *q,
         struct usb_host_endpoint *endp, bce_vhci_device_t dev_addr, enum dma_data_direction dir);
 void bce_vhci_destroy_transfer_queue(struct bce_vhci *vhci, struct bce_vhci_transfer_queue *q);

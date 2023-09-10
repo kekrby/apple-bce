@@ -395,79 +395,41 @@ static void bce_vhci_urb_complete(struct bce_vhci_urb *urb, int status)
     list_add_tail(&real_urb->urb_list, &q->giveback_urb_list);
 }
 
-static int bce_vhci_urb_dequeue_unlink(struct bce_vhci_transfer_queue *q, struct urb *urb, int status)
-{
-    struct bce_vhci_urb *vurb;
-    int ret = 0;
-    if ((ret = usb_hcd_check_unlink_urb(q->vhci->hcd, urb, status)))
-        return ret;
-    usb_hcd_unlink_urb_from_ep(q->vhci->hcd, urb);
-
-    vurb = urb->hcpriv;
-    if (vurb->state != BCE_VHCI_URB_INIT_PENDING)
-        ++q->remaining_active_requests;
-    return ret;
-}
-
-static int bce_vhci_urb_remove(struct bce_vhci_transfer_queue *q, struct urb *urb, int status)
-{
-    unsigned long flags;
-    int ret;
-    struct bce_vhci_urb *vurb;
-    spin_lock_irqsave(&q->urb_lock, flags);
-    ret = bce_vhci_urb_dequeue_unlink(q, urb, status);
-    spin_unlock_irqrestore(&q->urb_lock, flags);
-    if (ret)
-        return ret;
-    vurb = urb->hcpriv;
-    kfree(vurb);
-    usb_hcd_giveback_urb(q->vhci->hcd, urb, status);
-    return 0;
-}
-
-static void bce_vhci_urb_cancel_w(struct work_struct *ws)
-{
-    struct bce_vhci_transfer_queue_urb_cancel_work *w =
-            container_of(ws, struct bce_vhci_transfer_queue_urb_cancel_work, ws);
-
-    pr_debug("bce-vhci: [%02x] Cancelling URB\n", w->q->endp_addr);
-    bce_vhci_transfer_queue_pause(w->q, BCE_VHCI_PAUSE_INTERNAL_WQ);
-    bce_vhci_urb_remove(w->q, w->urb, w->status);
-    bce_vhci_transfer_queue_resume(w->q, BCE_VHCI_PAUSE_INTERNAL_WQ);
-    kfree(w);
-}
-
 int bce_vhci_urb_request_cancel(struct bce_vhci_transfer_queue *q, struct urb *urb, int status)
 {
-    struct bce_vhci_transfer_queue_urb_cancel_work *w;
     struct bce_vhci_urb *vurb;
     unsigned long flags;
     int ret;
 
-    /* Quick check to try to avoid pausing; must past 0 as status we won't be able to call it again. */
     spin_lock_irqsave(&q->urb_lock, flags);
-    if ((ret = usb_hcd_check_unlink_urb(q->vhci->hcd, urb, 0))) {
+    if ((ret = usb_hcd_check_unlink_urb(q->vhci->hcd, urb, status))) {
         spin_unlock_irqrestore(&q->urb_lock, flags);
         return ret;
     }
 
     vurb = urb->hcpriv;
     /* If the URB wasn't posted to the device yet, we can still remove it on the host without pausing the queue. */
-    if (vurb->state == BCE_VHCI_URB_INIT_PENDING) {
-        bce_vhci_urb_dequeue_unlink(q, urb, status);
+    if (vurb->state != BCE_VHCI_URB_INIT_PENDING) {
+        pr_debug("bce-vhci: [%02x] Cancelling URB\n", q->endp_addr);
+
         spin_unlock_irqrestore(&q->urb_lock, flags);
-        kfree(vurb);
-        usb_hcd_giveback_urb(q->vhci->hcd, urb, status);
-        return 0;
+        bce_vhci_transfer_queue_pause(q, BCE_VHCI_PAUSE_INTERNAL_WQ);
+        spin_lock_irqsave(&q->urb_lock, flags);
+
+        ++q->remaining_active_requests;
     }
+
+    usb_hcd_unlink_urb_from_ep(q->vhci->hcd, urb);
+
     spin_unlock_irqrestore(&q->urb_lock, flags);
 
-    w = kzalloc(sizeof(struct bce_vhci_transfer_queue_urb_cancel_work), GFP_KERNEL);
-    INIT_WORK(&w->ws, bce_vhci_urb_cancel_w);
-    w->q = q;
-    w->urb = urb;
-    w->status = status;
-    queue_work(q->vhci->tq_state_wq, &w->ws);
+    usb_hcd_giveback_urb(q->vhci->hcd, urb, status);
+
+    if (vurb->state != BCE_VHCI_URB_INIT_PENDING)
+        bce_vhci_transfer_queue_resume(q, BCE_VHCI_PAUSE_INTERNAL_WQ);
+
+    kfree(vurb);
+
     return 0;
 }
 
